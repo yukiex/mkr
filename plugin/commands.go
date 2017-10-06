@@ -82,7 +82,7 @@ func install(u, binPath string) error {
 	}
 	fmt.Println(tmpdir)
 
-	return nil
+	return pickupExecutable(workDir, binPath)
 }
 
 func download(u string) (fpath string, err error) {
@@ -127,6 +127,63 @@ func download(u string) (fpath string, err error) {
 		return
 	}
 	return fpath, nil
+}
+
+func pickupExecutable(workdir, bindir string) error {
+	return filepath.Walk(workdir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || info.IsDir() {
+			return err
+		}
+		if name := info.Name(); (info.Mode()&0111) != 0 && looksLikePlugin(name) {
+			return place(path, filepath.Join(bindir, name))
+		}
+		return nil
+	})
+}
+
+func looksLikePlugin(name string) bool {
+	return strings.HasPrefix(name, "check-") || strings.HasPrefix(name, "mackerel-plugin-")
+}
+
+func place(src, dest string) error {
+	_, err := os.Stat(dest)
+	if err == nil {
+		logger.Log("", fmt.Sprintf("%s already exists. skip installing for now", dest))
+		return nil
+	}
+	logger.Log("", fmt.Sprintf("install %s\n", filepath.Base(dest)))
+	err = os.Rename(src, dest)
+	// When `src` and `dest` are on different file systems, os.Rename sometimes fails
+	if err != nil {
+		return copyExecutable(src, dest)
+	}
+	return nil
+}
+
+func copyExecutable(srcName string, destName string) error {
+	src, err := os.Open(srcName)
+	if err != nil {
+		return err
+	}
+	defer src.Close()
+
+	dest, err := os.Create(destName)
+	if err != nil {
+		return err
+	}
+	defer dest.Close()
+
+	_, err = io.Copy(dest, src)
+	if err != nil {
+		return err
+	}
+
+	fileInfo, err := os.Stat(srcName)
+	if err != nil {
+		return err
+	}
+
+	return os.Chmod(destName, fileInfo.Mode())
 }
 
 func setupPluginDir(prefix string) (string, error) {
