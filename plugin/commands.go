@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/pkg/errors"
@@ -36,25 +37,36 @@ func doPluginInstall(c *cli.Context) error {
 	if argInstallTarget == "" {
 		return fmt.Errorf("Specify install name")
 	}
-
-	err := setupPluginDir(c.String("prefix"))
+	it, err := parseInstallTarget(argInstallTarget)
 	if err != nil {
 		return errors.Wrap(err, "failed to install plugin")
 	}
+
+	pluginDir, err := setupPluginDir(c.String("prefix"))
+	if err != nil {
+		return errors.Wrap(err, "failed to install plugin")
+	}
+
+	u, err := it.makeDownloadURL()
+	if err != nil {
+		return errors.Wrap(err, "failed to install plugin while making download url")
+	}
+	_ = pluginDir
+	_ = u
 
 	fmt.Println("do plugin install [wip]")
 	return nil
 }
 
-func setupPluginDir(prefix string) error {
+func setupPluginDir(prefix string) (string, error) {
 	if prefix == "" {
 		prefix = "/opt/mackerel-agent/plugins"
 	}
 	err := os.MkdirAll(filepath.Join(prefix, "bin"), 0755)
 	if err != nil {
-		return errors.Wrap(err, "failed to setup plugin directory")
+		return "", errors.Wrap(err, "failed to setup plugin directory")
 	}
-	return nil
+	return prefix, nil
 }
 
 type installTarget struct {
@@ -62,6 +74,18 @@ type installTarget struct {
 	repo       string
 	pluginName string
 	releaseTag string
+}
+
+func (it *installTarget) makeDownloadURL() (string, error) {
+	if it.owner != "" && it.repo != "" {
+		if it.releaseTag == "" {
+			return "", fmt.Errorf("not implemented")
+		}
+		filename := fmt.Sprintf("%s_%s_%s.zip", it.repo, runtime.GOOS, runtime.GOARCH)
+		return fmt.Sprintf("https://github.com/%s/%s/releases/download/%s/%s",
+			it.owner, it.repo, it.releaseTag, filename), nil
+	}
+	return "", fmt.Errorf("not implemented")
 }
 
 func parseInstallTarget(target string) (*installTarget, error) {

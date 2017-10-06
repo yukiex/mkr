@@ -20,7 +20,7 @@ func TestSetupPluginDir(t *testing.T) {
 	{
 		tmpd := tempd(t)
 		defer os.RemoveAll(tmpd)
-		err := setupPluginDir(tmpd)
+		_, err := setupPluginDir(tmpd)
 		if err != nil {
 			t.Errorf("error should be nil but: %s", err)
 		}
@@ -37,7 +37,7 @@ func TestSetupPluginDir(t *testing.T) {
 		if err != nil {
 			t.Errorf("error occured while chmod directory: %s", err)
 		}
-		err = setupPluginDir(tmpd)
+		_, err = setupPluginDir(tmpd)
 		if err == nil {
 			t.Errorf("error should be occured while manipulate unpermitted directory, but it is nil")
 		}
