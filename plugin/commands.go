@@ -2,11 +2,16 @@ package plugin
 
 import (
 	"fmt"
+	"io"
+	"io/ioutil"
+	"net/http"
 	"os"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
 
+	"github.com/mackerelio/mkr/logger"
 	"github.com/pkg/errors"
 	"gopkg.in/urfave/cli.v1"
 )
@@ -51,11 +56,65 @@ func doPluginInstall(c *cli.Context) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to install plugin while making download url")
 	}
-	_ = pluginDir
-	_ = u
+	err = install(u, filepath.Join(pluginDir, "bin"))
 
 	fmt.Println("do plugin install [wip]")
 	return nil
+}
+
+func install(u, binPath string) error {
+	logger.Log("", fmt.Sprintf("download %s\n", u))
+	archivePath, err := download(u)
+	if err != nil {
+		return errors.Wrap(err, "failed to download")
+	}
+	fmt.Println(archivePath)
+
+	return nil
+}
+
+func download(u string) (fpath string, err error) {
+	req, err := http.NewRequest(http.MethodGet, u, nil)
+	if err != nil {
+		err = errors.Wrap(err, "failed to create request")
+		return
+	}
+	req.Header.Set("User-Agent", "mkr-plugin-installer/0.0.0")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		err = errors.Wrap(err, "failed to create request")
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		err = fmt.Errorf("http response not OK. code: %d, url: %s", resp.StatusCode, u)
+		return
+	}
+	archiveBase := path.Base(u)
+	tempdir, err := ioutil.TempDir("", "mkr-plugin-installer-")
+	if err != nil {
+		err = errors.Wrap(err, "failed to create tempdir")
+		return
+	}
+	defer func() {
+		if err != nil {
+			os.RemoveAll(tempdir)
+		}
+	}()
+	fpath = filepath.Join(tempdir, archiveBase)
+	f, err := os.OpenFile(filepath.Join(tempdir, archiveBase), os.O_RDWR|os.O_CREATE|os.O_TRUNC, 0755)
+	if err != nil {
+		err = errors.Wrap(err, "failed to open file")
+		return
+	}
+	defer f.Close()
+	// progressR := progbar(resp.Body, resp.ContentLength)
+	_, err = io.Copy(f, resp.Body)
+	if err != nil {
+		err = errors.Wrap(err, "failed to read response")
+		return
+	}
+	return fpath, nil
 }
 
 func setupPluginDir(prefix string) (string, error) {
