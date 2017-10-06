@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/mackerelio/mkr/logger"
+	"github.com/mholt/archiver"
 	"github.com/pkg/errors"
 	"gopkg.in/urfave/cli.v1"
 )
@@ -68,7 +69,18 @@ func install(u, binPath string) error {
 	if err != nil {
 		return errors.Wrap(err, "failed to download")
 	}
-	fmt.Println(archivePath)
+	tmpdir := filepath.Dir(archivePath)
+	defer os.RemoveAll(tmpdir)
+
+	workDir := filepath.Join(tmpdir, "work")
+	os.MkdirAll(workDir, 0755)
+
+	logger.Log("", fmt.Sprintf("extract %s\n", path.Base(u)))
+	err = archiver.Zip.Open(archivePath, workDir)
+	if err != nil {
+		return errors.Wrap(err, "failed to extract")
+	}
+	fmt.Println(tmpdir)
 
 	return nil
 }
